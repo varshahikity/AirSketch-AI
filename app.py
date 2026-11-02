@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import threading
 import gradio as gr
 
 from hand_tracker import HandTracker
@@ -12,9 +13,13 @@ from drawing_canvas import DrawingCanvas
 # -----------------------------
 tracker = HandTracker(
     max_hands=1,
+    model_complexity=0,   # lighter model -> much faster on Render's CPU
     detection_confidence=0.75,
     tracking_confidence=0.70
 )
+
+# The tracker keeps per-frame state, so only one frame may use it at a time
+tracker_lock = threading.Lock()
 
 
 # -----------------------------
@@ -40,6 +45,11 @@ def initial_state():
 # Main frame processing
 # -----------------------------
 def process_frame(img, state):
+    with tracker_lock:
+        return _process_frame(img, state)
+
+
+def _process_frame(img, state):
     if img is None:
         return None, state
 
@@ -476,8 +486,9 @@ with gr.Blocks(
         fn=process_frame,
         inputs=[camera, state],
         outputs=[output, state],
-        time_limit=30,
-        stream_every=0.05
+        time_limit=300,        # was 30 -> stream stopped after 30 seconds
+        stream_every=0.15,     # was 0.05 -> too fast for a free Render CPU
+        concurrency_limit=1
     )
 
 
